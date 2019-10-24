@@ -1,0 +1,310 @@
+//main for my c shell
+//created by christopher outhwaite
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <signal.h>
+#include "get_path.h"
+#include "get_arg.h"
+#include <dirent.h>
+
+#define BUFFSIZE 128
+
+char buf[BUFFSIZE];
+char **args;
+int num_args;
+pid_t pid;
+char *prompt;
+struct pathelement  *path;
+char *prompt_base;
+char *ptr;
+extern char **environ;
+char * prev;
+
+
+int sigignore(int sig);
+
+void handle_child(int sig) {
+	int saved_errno = errno;
+	errno = saved_errno;
+}
+void handle_sigint(int sig) {
+	sigignore(SIGTERM);
+	sigignore(SIGTSTP);
+}
+
+void termsig(int sig) {}
+
+char* which(char * command) {
+	char cmd[64];
+	struct pathelement *p;
+	p = get_path();
+	while (p) {
+		//strcpy(cmd, p->element); 
+		//strncat(cmd, "/", 1);
+		//strncat(cmd, command, strlen(command));
+		sprintf(cmd, "%s/%s", p->element, command);
+		if (access(cmd, X_OK) == 0) {
+			printf("[%s]\n", cmd);
+			fflush(stdout);
+			return cmd;
+		}
+		p = p->next;
+	}
+	return NULL;
+}
+void where(char * command) {
+	char cmd[64];
+	struct pathelement *p;
+	p = get_path();
+	while (p) {
+		//strcpy(cmd, p->element); 
+		sprintf(cmd, "%s/%s", p->element, command);
+		//strncat(cmd, command, strlen(command));
+		if (access(cmd, F_OK) == 0) {
+			printf("[%s]\n", cmd);
+			fflush(stdout);
+			//break;
+		}
+		p = p->next;
+	}
+}
+int main(void) {
+	signal(SIGINT, termsig);
+	signal(SIGTERM, handle_sigint);
+	signal(SIGSTOP, handle_sigint);
+	//int nc = REDIR_OW;
+	
+	path = get_path();
+	prev = getcwd(NULL, 0);
+	prompt_base = getcwd(NULL, 0);
+	prompt = getcwd(NULL, 0);
+	//prompt_base = getcwd(NULL, 0);
+
+	//start:
+	printf("2%s> ", prompt);
+	start:
+
+	while (fgets(buf, BUFFSIZE, stdin) != NULL) {
+		while (waitpid((pid_t)(-1), 0, WNOHANG) > 0) {
+		}
+	num_args = get_argc(buf);
+	if (num_args == 0) {
+		printf("3%s> ", prompt);
+		break;
+	}
+	
+	args = get_argv(buf, num_args);
+	if (strcmp (args[0], "which") == 0) {
+		if (num_args == 2) {
+			which(args[1]);
+		}
+		else {
+			printf("incorrect number of args");
+		}
+		
+		printf(" ");
+	}
+	else if (strcmp (args[0], "where") == 0) {
+		if (num_args == 2) {
+			where(args[1]);
+		}
+		else {
+			printf("incorrect number of args");
+		}
+	}
+	else if(strcmp (args[0], "pwd") == 0) { //prints working directory
+		ptr = getcwd(NULL, 0);
+		printf("CWD = %s\n", ptr);
+		free(ptr);
+	}
+	
+	else if(strcmp(args[0], "prompt") == 0) {
+		if (num_args == 1) {
+			char * prompt_pre = malloc(32); //sizeof not needed characters are 1
+			printf("Enter a Prompt: ");
+			fgets(prompt_pre, 32, stdin);
+			int len = strlen(prompt_base);
+			prompt_pre[strlen(prompt_pre) - 1] = '\0';
+			strcat(prompt_pre, prompt_base);
+			//printf("\n The prompt now is %s\n", prompt_pre);
+			prompt = prompt_pre;
+			//free(prompt_pre);
+			
+				 //TODO
+		}
+		else if(num_args == 2) {
+			//append arg[1] onto the front of prompt;
+			char * to_add = args[1];
+			int len = strlen(prompt_base);
+			strncat(to_add, prompt_base, len);
+			prompt = to_add;
+		}
+		else {
+			printf(" Wrong amount of args\n");
+		}
+	}
+	else if(strcmp(args[0], "cd") == 0) {
+		char * tmp = getcwd(NULL, 0);
+		if (num_args == 1) {
+			char *home = getenv("HOME");
+			chdir(home);
+			prev = tmp;
+		}
+		else if (num_args > 2) {
+			printf("Wrong Amount of Args");
+		}
+		else {
+			if (strcmp(args[1], "-")) {
+				chdir(prev);
+				prev = tmp;
+			}
+			else {
+				chdir(args[1]);
+			}
+		}
+	}
+	else if(strcmp(args[0], "pid") == 0) {
+		int pid_ans = getpid();
+		printf("PID = %d\n", pid_ans);
+	}
+	
+	else if (strcmp(args[0], "kill") == 0) {
+		if (num_args < 2) {
+			printf(" Need more aguments\n");
+		}
+		else if (num_args == 2) {
+			kill(atoi(args[1]), SIGTERM);
+		}
+		else if (num_args == 3) {
+			char * signal = malloc(sizeof(char) * strlen(args[1]));
+			strcpy(signal, &args[1][1]);
+			kill(atoi(args[2]), atoi(signal));
+			free(signal);
+		}
+		
+	}
+	else if (strcmp(args[0], "list") == 0) {
+		struct dirent * dire;
+
+		if (num_args == 1) {
+			DIR *dr = opendir(".");
+			while((dire = readdir(dr)) != NULL) {
+				printf("%s\n", dire->d_name);
+			}
+		}
+		else if (num_args == 2) { 
+			DIR *dr = opendir(args[1]);
+			if (dr == NULL) {
+				printf("could not open directory, probably your fault\n");
+			}
+			else {
+				while((dire = readdir(dr)) != NULL) {
+					printf("%s\n", dire->d_name);
+				}
+			}
+		}
+	}
+	else if (strcmp(args[0], "getenv") == 0) {
+		if (num_args > 2) {
+			fprintf(stderr, "TODO print actual error");
+		}
+		else if (num_args == 2) {
+			char* env = getenv(args[1]);
+			printf("%s", env);
+			free(env);
+		}
+		else if (num_args == 1) {
+			int i = 1;
+			char *s = *environ;
+			
+			for (; s; i++) {
+				printf("%s\n", s);
+				s = *(environ+i);
+			}
+		}
+	}
+	else if (strcmp(args[0], "setenv") == 0) {
+		if (num_args == 1) {
+			int i = 1;
+			char *s = *environ;
+			
+			for (; s; i++) {
+				printf("%s\n", s);
+				s = *(environ+i);
+			}
+		}
+		else if (num_args == 2) {
+			setenv(args[1], " ", 0);
+		}
+		else if (num_args == 3) {
+			setenv(args[1], args[2], 1);
+			if (strcmp(args[1], "PATH") == 0) {
+				//code for freeing old path and updating new one
+			}
+			else if (strcmp(args[1], "HOME") == 0) {
+				//code for putting HOME directory as new home dir
+			}
+		}
+	}
+	else if (strcmp(args[0], "exit") == 0) {
+		free(prompt);
+		//free_path(path); TODO make free path... check if implemented already
+		for (int i = 0; i < num_args; i++) {
+			free(args[i]);
+		}
+		free(args);
+		clearerr(stdin);
+		exit(0);
+	}
+	else if (args[0][0] == '/' || args[0][0] == '.') { //else we will try to execute a external command
+		if (access(args[0], X_OK) == 0) {
+			pid = fork();
+
+			if (pid < 0) {
+			printf("error\n");
+			exit(1);
+			}
+			else if (pid == 0) {
+				execv(args[0], args);
+				printf("Error with running %s\n", args[0]);
+			}
+		}
+		else {
+			printf("command not found");
+		}
+	}
+	else {
+		char * command = which(path, args[0]);
+		if (command) {
+			pid = fork();
+			if (pid < 0) {
+				printf("error\n");
+				exit(1);
+			}
+			else if (pid == 0) {
+				execv(command, args);
+				printf("Error with running %s\n", args[0]);
+			}
+		}
+		else {
+			printf("command not found");
+		}
+	}
+	
+
+	for (int i = 0; i < num_args; i++) {
+		free(args[i]);
+	}
+	free(args);
+	free(prompt);
+	prompt = getcwd(NULL, 0);
+	printf("%s>", prompt);
+	}
+	clearerr(stdin);
+	goto start;
+	exit(0);
+}

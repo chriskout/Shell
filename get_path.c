@@ -42,3 +42,15 @@ struct pathelement *get_path()
 
   return pathlist;
 } /* end get_path() */
+
+void free_path2(struct pathelement *p) {
+/*	path_t * tmp;
+	while (p) { 
+		free(p->element);
+		tmp = p->next;
+		free(p);
+		p = tmp; */
+	printf("sad");		
+	
+}
+

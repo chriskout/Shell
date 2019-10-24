@@ -12,6 +12,8 @@
    elements. */
 struct pathelement *get_path();
 
+void free_path2(struct pathelement *p);
+
 struct pathelement
 {
   char *element;			/* a dir in the path */
